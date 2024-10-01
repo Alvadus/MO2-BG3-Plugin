@@ -1,6 +1,6 @@
 # -*- encoding: utf-8 -*-
 
-import mobase
+import mobase # type: ignore
 import os
 import json
 import subprocess
@@ -15,11 +15,6 @@ script_dir = os.path.abspath(__file__)
 root_folder = Path(__file__).parents[4]
 
 divine_path = os.path.join(Path(script_dir).parent, 'tools', 'Divine.exe')
-
-def __tr(self, string):
-     return QCoreApplication.translate("NameOfPluginClass", string)
-def display(self):  
-     qDebug(self.__tr(string))
 
 def find_meta_lsx(name, path): # Find meta.lsx in directory
     for root, dirs, files in os.walk(path):
@@ -45,8 +40,6 @@ def extract_meta_lsx(pak_path, output_dir): # Extract meta.lsx from .pak file
         stderr=subprocess.PIPE,
         text=True
     )
-
-    print(result)
 
     modinfo = {
                 "Name": "Override_Mod",
@@ -90,39 +83,160 @@ def parse_meta_lsx(meta_lsx_path): # Extract information from meta.lsx
             'Version': get_attribute_value(module_info, 'Version64'),
         }
         return mod_info
+    
 
-def generateSettings(modList: mobase.IModList, profile: mobase.IProfile, modsDict: dict = None) -> bool:
-    #raise IndexError(divine_path)
-
-    modInfoDict = {}
-    modJsons = {}
-    modSequence = modsDict if modsDict else modList.allModsByProfilePriority()
-
-    temp_dir = os.path.join(Path(__file__).resolve().parent, 'temp_extracted') 
-
-    # Extract meta.lsx from PAK Files
-    for mod in modSequence:
-       if (int(modList.state(mod) / 2) % 2 != 0):
-            pakFileFolder = modList.getMod(mod).absolutePath() + "\PAK_FILES" 
+def getModInfoFromCache(modName:str, profile: mobase.IProfile):
+    profilePath = profile.absolutePath()
+    cacheJsonPath = os.path.join(profilePath, "modsCache.json")
+    
+    if not os.path.exists(cacheJsonPath):
+        print("modsCache.json not found.")
+        return None
+    
+    with open(cacheJsonPath, 'r') as file:
+        modsCache = json.load(file)
+    
+    # Return all .pak files related to the modName
+    modPakFiles = []
+    for pak_file, mod_info in modsCache.items():
+        if "ModName" in mod_info and modName in mod_info["ModName"]:
+            modPakFiles.append({pak_file: mod_info})
+    
+    if modPakFiles:
+        return modPakFiles
+    else:
+        print(f"Mod '{modName}' not found in modsCache.json.")
+        return None
+    
+def getModCachesFromName(modName: str, profile: mobase.IProfile):
+    profilePath = profile.absolutePath()
+    cacheJsonPath = os.path.join(profilePath, "modsCache.json")
+    
+    if not os.path.exists(cacheJsonPath):
+        print("modsCache.json not found.")
+        return None
+    
+    with open(cacheJsonPath, 'r') as file:
+        modsCache = json.load(file)
         
-            info = modList.getMod(mod).absolutePath() + "\info.json"
-            if os.path.isdir(pakFileFolder):
-                if not os.path.exists(info):
-                    files = os.listdir(pakFileFolder)
-                    files = [f for f in files if f.endswith(".pak")]
-                    for file in os.listdir(pakFileFolder):
-                        if file.endswith(".pak"):
-                            mod_temp_dir = os.path.join(temp_dir, mod)
-                            if not os.path.exists(mod_temp_dir):
-                                os.makedirs(mod_temp_dir)
+    matchingMods = []
+    for pak_file, mod_info in modsCache.items():
+        if "ModName" in mod_info and modName in mod_info["ModName"]:
+            matchingMods.append({pak_file: mod_info})
+            # matchingMods[pak_file] = mod_info
+        
+    if matchingMods:
+        return matchingMods
+    else:
+        print(f"Mod '{modName}' not found in modsCache.json.")
+        return {}
+    
+def modInstalled(modList: mobase.IModList, profile: mobase.IProfile, mod) -> bool:
+    modsCache = {}
+    pakFileFolder = modList.getMod(mod).absolutePath() + "\\PAK_FILES"
+    
+    temp_dir = os.path.join(Path(__file__).resolve().parent, 'temp_extracted')
+    temp_dir = Path(temp_dir)
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    
+    if os.path.isdir(pakFileFolder):
+        files = os.listdir(pakFileFolder)
+        files = [f for f in files if f.lower().endswith(".pak")]
+        for file in files:
+            if file.endswith(".pak"):
+                mod_temp_dir = os.path.join(temp_dir, file)
+                if not os.path.exists(mod_temp_dir):
+                    os.makedirs(mod_temp_dir)
 
-                            mod_info = extract_meta_lsx(os.path.join(pakFileFolder, file), mod_temp_dir)
-                            if mod_info:
-                                modInfoDict[mod] = mod_info 
-            if os.path.exists(info):
-                modJsons[mod] = info
+                mod_info = extract_meta_lsx(os.path.join(pakFileFolder, file), mod_temp_dir)
+                if mod_info:
+                    modsCache[file] = mod_info
+                    if "ModName" not in modsCache[file]:
+                        modsCache[file]["ModName"] = []
+                    if mod not in modsCache[file]["ModName"]:
+                        modsCache[file]["ModName"].append(mod)
+                    # modsCache[file]["ModName"] = mod
+                    
+    if modsCache:
+        profilePath = profile.absolutePath()
+        cacheJsonPath = os.path.join(profilePath, "modsCache.json")
+        
+        with open(cacheJsonPath, 'r') as file:
+            cacheJson = json.load(file)
+            
+        for pak_file, mod_info in modsCache.items():
+            if pak_file not in cacheJson:
+                cacheJson[pak_file] = mod_info
+            if pak_file in cacheJson:
+                if mod not in cacheJson[pak_file]["ModName"]:
+                    cacheJson[pak_file]["ModName"].append(mod)
 
-    # Add Gustav to modsettings.lsx
+        with open(cacheJsonPath, 'w') as file:
+            json.dump(cacheJson, file, indent=4)
+            
+    # shutil.rmtree(temp_dir, ignore_errors=True)
+    
+    return cacheJson[pak_file] if modsCache else None
+    
+def fixModsCache(modList: mobase.IModList, profile: mobase.IProfile):
+    profilePath = profile.absolutePath()
+    cacheJsonPath = os.path.join(profilePath, "modsCache.json")
+    
+    with open(cacheJsonPath, 'r') as file:
+        modsCache = json.load(file)
+        
+    if modsCache:
+        for pak_file, mod_info in modsCache.items():
+            for modName in mod_info["ModName"]:
+                mod = modList.getMod(modName)
+                if not mod:
+                    modsCache[pak_file]["ModName"].remove(modName)
+                    
+        with open(cacheJsonPath, 'w') as file:
+            json.dump(modsCache, file, indent=4)
+       
+def modRemoved(modList: mobase.IModList, profile: mobase.IProfile, modName: str) -> bool:
+    profilePath = profile.absolutePath()
+    cacheJsonPath = os.path.join(profilePath, "modsCache.json")
+  
+    with open(cacheJsonPath, 'r') as file:
+        modsCache = json.load(file)
+        
+    matchingCache = getModCachesFromName(modName, profile)   
+    if matchingCache:
+        print("Mods found using", modName, ":", matchingCache)
+        for match in matchingCache:    
+            for pak_file, mod_info in match.items():
+                if modName in modsCache[pak_file]["ModName"]:
+                    modsCache[pak_file]["ModName"].remove(modName)
+                if not modsCache[pak_file]["ModName"]:
+                    del modsCache[pak_file]
+                            
+        with open(cacheJsonPath, 'w') as file:
+            json.dump(modsCache, file, indent=4)
+    else:
+        print("No mods found using", modName)
+        
+def generateSettings(modList: mobase.IModList, profile: mobase.IProfile) -> bool:
+    fixModsCache(modList, profile)
+    
+    modInfoDict = {}
+    modSequence = modList.allModsByProfilePriority()
+    
+    temp_dir = os.path.join(Path(__file__).resolve().parent, 'temp_extracted')
+    temp_dir = Path(temp_dir)
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    
+    for mod in modSequence:
+        if (int(modList.state(mod) / 2) % 2 != 0):  # Check if mod is active
+            
+            # Get all .pak files associated with the mod
+            pak_files_info = getModInfoFromCache(mod, profile)
+            if pak_files_info:
+                modInfoDict[mod] = pak_files_info
+            else:
+                modInfoDict[mod] = modInstalled(modList, profile, mod)
+                            
     root = minidom.Document()
     save = root.createElement('save')
     root.appendChild(save)
@@ -187,117 +301,78 @@ def generateSettings(modList: mobase.IModList, profile: mobase.IProfile, modsDic
     attributeVersion64Gustav.setAttribute('id', 'Version64') 
     attributeVersion64Gustav.setAttribute('value', '144961545746289842')
     attributeVersion64Gustav.setAttribute('type', 'int64')
-    nodeModuleShortDescGustav.appendChild(attributeVersion64Gustav)
+    nodeModuleShortDescGustav.appendChild(attributeVersion64Gustav)   
+    
+    # Geneate modsettings.lsx LoadOrder
+    for mod, pak_files_info_list in modInfoDict.items():
+        if not pak_files_info_list:
+            continue
+        
+        for pak_info_dict in pak_files_info_list:
+            for pak_file, mod_info in pak_info_dict.items():
+                name = mod_info.get('Name')
+                folder = mod_info.get('Folder')
+                uuid = mod_info.get('UUID')
+                version = mod_info.get('Version')
 
-    # Add info.json to mods that don't have it
-    for mod in modSequence:
-        if (int(modList.state(mod) / 2) % 2 != 0):
-            info = modList.getMod(mod).absolutePath() + "\info.json"
+                # Add to ModOrder
+                nodeModule = root.createElement('node')
+                nodeModule.setAttribute('id', 'Module')
+                nodeModOrderChildren.appendChild(nodeModule)
+                attributeModOrderUUID = root.createElement('attribute')
+                attributeModOrderUUID.setAttribute('id', 'UUID')
+                attributeModOrderUUID.setAttribute('value', uuid)
+                attributeModOrderUUID.setAttribute('type', 'FixedString')
+                nodeModule.appendChild(attributeModOrderUUID)
+                nodeModOrderChildren.appendChild(nodeModule)
 
-            if not os.path.exists(info):
-                if modInfoDict.get(mod):
-                    infojsonDict = modInfoDict[mod]
+                nodeModuleShortDesc = root.createElement('node')
+                nodeModuleShortDesc.setAttribute('id', 'ModuleShortDesc')
+                nodeModsChildren.appendChild(nodeModuleShortDesc)
+                attributeFolder = root.createElement('attribute')
+                attributeFolder.setAttribute('id', 'Folder')
+                attributeFolder.setAttribute('value', folder)
+                attributeFolder.setAttribute('type', 'LSString')
+                nodeModuleShortDesc.appendChild(attributeFolder)
+                attributeMD5 = root.createElement('attribute')
+                attributeMD5.setAttribute('id', 'MD5')
+                attributeMD5.setAttribute('value', '')
+                attributeMD5.setAttribute('type', 'LSString')
+                nodeModuleShortDesc.appendChild(attributeMD5)
+                attributeName = root.createElement('attribute')
+                attributeName.setAttribute('id', 'Name')
+                attributeName.setAttribute('value', name)
+                attributeName.setAttribute('type', 'LSString')
+                nodeModuleShortDesc.appendChild(attributeName)
+                attributeModsUUID = root.createElement('attribute')
+                attributeModsUUID.setAttribute('id', 'UUID')
+                attributeModsUUID.setAttribute('value', uuid)
+                attributeModsUUID.setAttribute('type', 'FixedString')
+                nodeModuleShortDesc.appendChild(attributeModsUUID)
+                attributeVersion = root.createElement('attribute')
+                attributeVersion.setAttribute('id', 'Version64')
+                attributeVersion.setAttribute('value', version)
+                attributeVersion.setAttribute('type', 'int64')
+                nodeModuleShortDesc.appendChild(attributeVersion)
+                nodeModsChildren.appendChild(nodeModuleShortDesc)
 
-                    JSONdata = {
-                            "Mods": [
-                                {
-                                    "Name": "",
-                                    "UUID": "",
-                                    "Folder": "",
-                                    "Version": "",
-                                    "MD5": ""
-                                }
-                            ]
-                        }
-
-                    JSONdata['Mods'][0]['Name'] = infojsonDict['Name']
-                    JSONdata['Mods'][0]['UUID'] = infojsonDict['UUID']
-                    JSONdata['Mods'][0]['Folder'] = infojsonDict['Folder']
-                    JSONdata['Mods'][0]['Version'] = infojsonDict['Version']
-                    JSONdata['Mods'][0]['MD5'] = infojsonDict['MD5']
-
-                    file_name = os.path.join(modList.getMod(mod).absolutePath() , 'info.json')
-                    
-                    with open(file_name, 'w') as file:
-                        json.dump(JSONdata, file, indent=4)
-                        modJsons[mod] = modList.getMod(mod).absolutePath() + "\info.json"
-
-                   
-
-    # Generate modsettings.lsx
-    for mod in modSequence:
-        if (int(modList.state(mod) / 2) % 2 != 0):
-            if modJsons.get(mod):              
-                with open(modJsons[mod], 'r') as file:
-                    #modJsons
-                    infoJson = json.load(file)
-
-                    mods = infoJson.get('Mods') or infoJson.get('mods')
-                    
-                    infoJson = mods[0]
-
-                    name = get_attribute(infoJson, 'Name', 'modName')
-                    folder = get_attribute(infoJson, 'Folder', 'folderName')
-                    uuid = get_attribute(infoJson, 'UUID', 'uuid')
-                    version = get_attribute(infoJson, 'Version', 'version')
-                    
-                    if name != "Override_Mod":
-                        nodeModule = root.createElement('node')
-                        nodeModule.setAttribute('id', 'Module')
-                        nodeModOrderChildren.appendChild(nodeModule)
-                        attributeModOrderUUID = root.createElement('attribute')
-                        attributeModOrderUUID.setAttribute('id', 'UUID')
-                        attributeModOrderUUID.setAttribute('value', uuid)
-                        attributeModOrderUUID.setAttribute('type', 'FixedString')
-                        nodeModule.appendChild(attributeModOrderUUID)
-                        nodeModOrderChildren.appendChild(nodeModule)
-
-                        nodeModuleShortDesc = root.createElement('node')
-                        nodeModuleShortDesc.setAttribute('id', 'ModuleShortDesc')
-                        nodeModsChildren.appendChild(nodeModuleShortDesc)
-                        attributeFolder = root.createElement('attribute')
-                        attributeFolder.setAttribute('id', 'Folder')
-                        attributeFolder.setAttribute('value', folder)
-                        attributeFolder.setAttribute('type', 'LSString')
-                        nodeModuleShortDesc.appendChild(attributeFolder)
-                        attributeMD5 = root.createElement('attribute')
-                        attributeMD5.setAttribute('id', 'MD5')
-                        attributeMD5.setAttribute('value', '')
-                        attributeMD5.setAttribute('type', 'LSString')
-                        nodeModuleShortDesc.appendChild(attributeMD5)
-                        attributeName = root.createElement('attribute')
-                        attributeName.setAttribute('id', 'Name')
-                        attributeName.setAttribute('value', name)
-                        attributeName.setAttribute('type', 'LSString')
-                        nodeModuleShortDesc.appendChild(attributeName)
-                        attributeModsUUID = root.createElement('attribute')
-                        attributeModsUUID.setAttribute('id', 'UUID')
-                        attributeModsUUID.setAttribute('value', uuid)
-                        attributeModsUUID.setAttribute('type', 'FixedString')
-                        nodeModuleShortDesc.appendChild(attributeModsUUID)
-                        attributeVersion = root.createElement('attribute')
-                        attributeVersion.setAttribute('id', 'Version64')
-                        attributeVersion.setAttribute('value', version)
-                        attributeVersion.setAttribute('type', 'int64')
-                        nodeModuleShortDesc.appendChild(attributeVersion)
-                        nodeModsChildren.appendChild(nodeModuleShortDesc)
-
+    # Save the modsettings.lsx file
     xml_str = root.toprettyxml(indent="  ")
     outputPath = profile.absolutePath() + "\\modsettings.lsx"
-    with open(outputPath, "w") as f:
+    with open(outputPath, "w", encoding='utf-8') as f:
         f.write(xml_str)
         f.close()
 
+    # Clean up the temp directory
     temp_dir = Path(temp_dir)
-
-    for item in temp_dir.iterdir():
-        try:
-            if item.is_file() or item.is_symlink():
-                item.unlink()
-            elif item.is_dir():
-                shutil.rmtree(item)
-        except Exception as e:
-            print(f"Error deleting {item}: {e}")     
-                
+    if os.path.exists(temp_dir):
+        for item in temp_dir.iterdir():
+            try:
+                if item.is_file() or item.is_symlink():
+                    item.unlink()
+                elif item.is_dir():
+                    shutil.rmtree(item)
+            except Exception as e:
+                print(f"Error deleting {item}: {e}")
 
     return True
