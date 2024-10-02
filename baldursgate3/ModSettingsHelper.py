@@ -2,6 +2,7 @@
 
 import mobase # type: ignore
 import os
+import platform
 import json
 import subprocess
 from pathlib import Path
@@ -69,11 +70,25 @@ def get_attribute(info, *keys): # Match json attributes
             return info[key]
     return None
 
+def long_path_support(path):
+    if platform.system() == 'Windows' and len(path) > 255:
+        return f"\\\\?\\{os.path.abspath(path)}"
+    return path
+
 def parse_meta_lsx(meta_lsx_path): # Extract information from meta.lsx
+    meta_lsx_path = long_path_support(meta_lsx_path)
+    
+    if not os.path.exists(meta_lsx_path):
+        raise FileNotFoundError(f"The file {meta_lsx_path} does not exist.")
+    
     if meta_lsx_path:
         tree = ET.parse(str(meta_lsx_path))
         root = tree.getroot()
         module_info = root.find(".//node[@id='ModuleInfo']")
+        
+        if module_info is None:
+            raise ValueError(f"'ModuleInfo' node not found in {meta_lsx_path}. Check the XML structure.")
+    
         mod_info = {
             'Folder': get_attribute_value(module_info, 'Folder'),
             'Name': get_attribute_value(module_info, 'Name'),
@@ -315,7 +330,7 @@ def generateSettings(modList: mobase.IModList, profile: mobase.IProfile) -> bool
                     folder = mod_info.get('Folder')
                     uuid = mod_info.get('UUID')
                     version = mod_info.get('Version')
-    
+
                     # Add to ModOrder
                     nodeModule = root.createElement('node')
                     nodeModule.setAttribute('id', 'Module')
@@ -326,7 +341,7 @@ def generateSettings(modList: mobase.IModList, profile: mobase.IProfile) -> bool
                     attributeModOrderUUID.setAttribute('type', 'FixedString')
                     nodeModule.appendChild(attributeModOrderUUID)
                     nodeModOrderChildren.appendChild(nodeModule)
-    
+
                     nodeModuleShortDesc = root.createElement('node')
                     nodeModuleShortDesc.setAttribute('id', 'ModuleShortDesc')
                     nodeModsChildren.appendChild(nodeModuleShortDesc)
