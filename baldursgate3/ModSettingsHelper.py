@@ -62,7 +62,8 @@ def extract_meta_lsx(pak_path, output_dir): # Extract meta.lsx from .pak file
 
 def get_attribute_value(node, attr_id): # Extract attribute value
     attribute = node.find(f".//attribute[@id='{attr_id}']")
-    return attribute.get('value') if attribute is not None else None
+    return {'value': attribute.get('value'), 'type': attribute.get('type')} if attribute is not None else None
+    # attribute.get('value') if attribute is not None else None
 
 def get_attribute(info, *keys): # Match json attributes
     for key in keys:
@@ -75,28 +76,30 @@ def long_path_support(path):
         return f"\\\\?\\{os.path.abspath(path)}"
     return path
 
-def parse_meta_lsx(meta_lsx_path): # Extract information from meta.lsx
-    meta_lsx_path = long_path_support(meta_lsx_path)
-    
-    if not os.path.exists(meta_lsx_path):
-        raise FileNotFoundError(f"The file {meta_lsx_path} does not exist.")
-    
-    if meta_lsx_path:
+def parse_meta_lsx(meta_lsx_path):  # Extract information from meta.lsx
+    if meta_lsx_path:  
+        meta_lsx_path = long_path_support(meta_lsx_path)
+
+        if not os.path.exists(meta_lsx_path):
+            raise FileNotFoundError(f"The file {meta_lsx_path} does not exist.")
+
         tree = ET.parse(str(meta_lsx_path))
         root = tree.getroot()
         module_info = root.find(".//node[@id='ModuleInfo']")
-        
+
         if module_info is None:
             raise ValueError(f"'ModuleInfo' node not found in {meta_lsx_path}. Check the XML structure.")
-    
+        
         mod_info = {
-            'Folder': get_attribute_value(module_info, 'Folder'),
-            'Name': get_attribute_value(module_info, 'Name'),
-            'PublishHandle': get_attribute_value(module_info, 'PublishHandle'),
-            'UUID': get_attribute_value(module_info, 'UUID'),
-            'MD5': get_attribute_value(module_info, 'MD5'),
-            'Version': get_attribute_value(module_info, 'Version64'),
-        }
+                'Folder': get_attribute_value(module_info, 'Folder'),
+                'Name': get_attribute_value(module_info, 'Name'),
+                'PublishHandle': get_attribute_value(module_info, 'PublishHandle'),
+                'UUID': get_attribute_value(module_info, 'UUID'),
+                'MD5': get_attribute_value(module_info, 'MD5'),
+                'Version': get_attribute_value(module_info, 'Version'),
+                'Version64': get_attribute_value(module_info, 'Version64'),
+            }
+
         return mod_info
     
 
@@ -319,58 +322,67 @@ def generateSettings(modList: mobase.IModList, profile: mobase.IProfile) -> bool
     nodeModuleShortDescGustav.appendChild(attributeVersion64Gustav)   
     
     # Geneate modsettings.lsx LoadOrder
-    for mod, pak_files_info_list in modInfoDict.items():
-        if not pak_files_info_list:
-            continue
-        
-        for pak_info_dict in pak_files_info_list:
-            if isinstance(pak_info_dict, dict):
-                for pak_file, mod_info in pak_info_dict.items():
-                    name = mod_info.get('Name')
-                    folder = mod_info.get('Folder')
-                    uuid = mod_info.get('UUID')
-                    version = mod_info.get('Version')
+    for mod in modSequence:  # Use modSequence for iteration
+        if (int(modList.state(mod) / 2) % 2 != 0):  # Check if mod is active
+            pak_files_info_list = modInfoDict.get(mod, [])  # Get pak files info for the active mod
+            if not pak_files_info_list:
+                continue
+            
+            for pak_info_dict in pak_files_info_list:
+                if isinstance(pak_info_dict, dict):
+                    for pak_file, mod_info in pak_info_dict.items():
+                        
+                        name = mod_info.get('Name')
+                        folder = mod_info.get('Folder')
+                        uuid = mod_info.get('UUID')
+                        version = mod_info.get('Version')
+                        version64 = mod_info.get('Version64')
 
-                    # Add to ModOrder
-                    nodeModule = root.createElement('node')
-                    nodeModule.setAttribute('id', 'Module')
-                    nodeModOrderChildren.appendChild(nodeModule)
-                    attributeModOrderUUID = root.createElement('attribute')
-                    attributeModOrderUUID.setAttribute('id', 'UUID')
-                    attributeModOrderUUID.setAttribute('value', uuid)
-                    attributeModOrderUUID.setAttribute('type', 'FixedString')
-                    nodeModule.appendChild(attributeModOrderUUID)
-                    nodeModOrderChildren.appendChild(nodeModule)
+                        if name != "Override_Mod":
+                            # Add to ModOrder
+                            nodeModule = root.createElement('node')
+                            nodeModule.setAttribute('id', 'Module')
+                            nodeModOrderChildren.appendChild(nodeModule)
+                            attributeModOrderUUID = root.createElement('attribute')
+                            attributeModOrderUUID.setAttribute('id', 'UUID')
+                            attributeModOrderUUID.setAttribute('value', uuid.get('value'))
+                            attributeModOrderUUID.setAttribute('type', uuid.get('type'))
+                            nodeModule.appendChild(attributeModOrderUUID)
 
-                    nodeModuleShortDesc = root.createElement('node')
-                    nodeModuleShortDesc.setAttribute('id', 'ModuleShortDesc')
-                    nodeModsChildren.appendChild(nodeModuleShortDesc)
-                    attributeFolder = root.createElement('attribute')
-                    attributeFolder.setAttribute('id', 'Folder')
-                    attributeFolder.setAttribute('value', folder)
-                    attributeFolder.setAttribute('type', 'LSString')
-                    nodeModuleShortDesc.appendChild(attributeFolder)
-                    attributeMD5 = root.createElement('attribute')
-                    attributeMD5.setAttribute('id', 'MD5')
-                    attributeMD5.setAttribute('value', '')
-                    attributeMD5.setAttribute('type', 'LSString')
-                    nodeModuleShortDesc.appendChild(attributeMD5)
-                    attributeName = root.createElement('attribute')
-                    attributeName.setAttribute('id', 'Name')
-                    attributeName.setAttribute('value', name)
-                    attributeName.setAttribute('type', 'LSString')
-                    nodeModuleShortDesc.appendChild(attributeName)
-                    attributeModsUUID = root.createElement('attribute')
-                    attributeModsUUID.setAttribute('id', 'UUID')
-                    attributeModsUUID.setAttribute('value', uuid)
-                    attributeModsUUID.setAttribute('type', 'FixedString')
-                    nodeModuleShortDesc.appendChild(attributeModsUUID)
-                    attributeVersion = root.createElement('attribute')
-                    attributeVersion.setAttribute('id', 'Version64')
-                    attributeVersion.setAttribute('value', version)
-                    attributeVersion.setAttribute('type', 'int64')
-                    nodeModuleShortDesc.appendChild(attributeVersion)
-                    nodeModsChildren.appendChild(nodeModuleShortDesc)
+                            # Add to Mods
+                            nodeModuleShortDesc = root.createElement('node')
+                            nodeModuleShortDesc.setAttribute('id', 'ModuleShortDesc')
+                            nodeModsChildren.appendChild(nodeModuleShortDesc)
+                            attributeFolder = root.createElement('attribute')
+                            attributeFolder.setAttribute('id', 'Folder')
+                            attributeFolder.setAttribute('value', folder.get('value'))
+                            attributeFolder.setAttribute('type', folder.get('type'))
+                            nodeModuleShortDesc.appendChild(attributeFolder)
+                            attributeMD5 = root.createElement('attribute')
+                            attributeMD5.setAttribute('id', 'MD5')
+                            attributeMD5.setAttribute('value', '')
+                            attributeMD5.setAttribute('type', 'LSString')
+                            nodeModuleShortDesc.appendChild(attributeMD5)
+                            attributeName = root.createElement('attribute')
+                            attributeName.setAttribute('id', 'Name')
+                            attributeName.setAttribute('value', name.get('value'))
+                            attributeName.setAttribute('type', name.get('type'))
+                            nodeModuleShortDesc.appendChild(attributeName)
+                            attributeModsUUID = root.createElement('attribute')
+                            attributeModsUUID.setAttribute('id', 'UUID')
+                            attributeModsUUID.setAttribute('value', uuid.get('value'))
+                            attributeModsUUID.setAttribute('type', uuid.get('type'))
+                            nodeModuleShortDesc.appendChild(attributeModsUUID)
+                            attributeVersion = root.createElement('attribute')
+                            attributeVersion.setAttribute('id', 'Version')
+                            attributeVersion.setAttribute('value', version.get('value') if version else '')
+                            attributeVersion.setAttribute('type', version.get('type') if version else '')
+                            nodeModuleShortDesc.appendChild(attributeVersion)
+                            attributeVersion64 = root.createElement('attribute')
+                            attributeVersion64.setAttribute('id', 'Version64')
+                            attributeVersion64.setAttribute('value', version64.get('value') if version64 else '')
+                            attributeVersion64.setAttribute('type', version64.get('type') if version64 else '')
+                            nodeModuleShortDesc.appendChild(attributeVersion64)
 
     # Save the modsettings.lsx file
     xml_str = root.toprettyxml(indent="  ")
