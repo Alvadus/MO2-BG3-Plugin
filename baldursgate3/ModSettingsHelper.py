@@ -47,7 +47,9 @@ def extract_meta_lsx(pak_path, output_dir): # Extract meta.lsx from .pak file
                 "UUID": "Override_Mod",
                 "Folder": "Override_Mod",
                 "Version": "Override_Mod",
-                "MD5": "Override_Mod"
+                "Version64": "Override_Mod",
+                "MD5": "Override_Mod",
+                "PublishHandle": "Override_Mod"
             }
 
     if result.returncode == 0:
@@ -69,6 +71,9 @@ def get_attribute(info, *keys): # Match json attributes
     for key in keys:
         if key in info:
             return info[key]
+    return None
+
+def create_attribute():
     return None
 
 def long_path_support(path):
@@ -334,6 +339,7 @@ def generateSettings(modList: mobase.IModList, profile: mobase.IProfile) -> bool
                         
                         name = mod_info.get('Name')
                         folder = mod_info.get('Folder')
+                        publish_handle = mod_info.get('PublishHandle')
                         uuid = mod_info.get('UUID')
                         version = mod_info.get('Version')
                         version64 = mod_info.get('Version64')
@@ -353,31 +359,44 @@ def generateSettings(modList: mobase.IModList, profile: mobase.IProfile) -> bool
                             nodeModuleShortDesc = root.createElement('node')
                             nodeModuleShortDesc.setAttribute('id', 'ModuleShortDesc')
                             nodeModsChildren.appendChild(nodeModuleShortDesc)
+                            
                             attributeFolder = root.createElement('attribute')
                             attributeFolder.setAttribute('id', 'Folder')
                             attributeFolder.setAttribute('value', folder.get('value'))
                             attributeFolder.setAttribute('type', folder.get('type'))
                             nodeModuleShortDesc.appendChild(attributeFolder)
+                            
                             attributeMD5 = root.createElement('attribute')
                             attributeMD5.setAttribute('id', 'MD5')
                             attributeMD5.setAttribute('value', '')
                             attributeMD5.setAttribute('type', 'LSString')
                             nodeModuleShortDesc.appendChild(attributeMD5)
+                            
                             attributeName = root.createElement('attribute')
                             attributeName.setAttribute('id', 'Name')
                             attributeName.setAttribute('value', name.get('value'))
                             attributeName.setAttribute('type', name.get('type'))
                             nodeModuleShortDesc.appendChild(attributeName)
+                            
+                            if publish_handle:
+                                attributePublishHandle = root.createElement('attribute')
+                                attributePublishHandle.setAttribute('id', 'PublishHandle')
+                                attributePublishHandle.setAttribute('value', publish_handle.get('value'))
+                                attributePublishHandle.setAttribute('type', publish_handle.get('type'))
+                                nodeModuleShortDesc.appendChild(attributePublishHandle)
+                            
                             attributeModsUUID = root.createElement('attribute')
                             attributeModsUUID.setAttribute('id', 'UUID')
                             attributeModsUUID.setAttribute('value', uuid.get('value'))
                             attributeModsUUID.setAttribute('type', uuid.get('type'))
                             nodeModuleShortDesc.appendChild(attributeModsUUID)
+                            
                             attributeVersion = root.createElement('attribute')
                             attributeVersion.setAttribute('id', 'Version')
                             attributeVersion.setAttribute('value', version.get('value') if version else '')
                             attributeVersion.setAttribute('type', version.get('type') if version else '')
                             nodeModuleShortDesc.appendChild(attributeVersion)
+                            
                             attributeVersion64 = root.createElement('attribute')
                             attributeVersion64.setAttribute('id', 'Version64')
                             attributeVersion64.setAttribute('value', version64.get('value') if version64 else '')

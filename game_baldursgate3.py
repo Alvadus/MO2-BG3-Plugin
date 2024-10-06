@@ -15,7 +15,7 @@ from .baldursgate3 import ModSettingsHelper
 class BaldursGate3Game(BasicGame, mobase.IPluginFileMapper):
     Name = "Baldur's Gate 3 Unofficial Support Plugin"
     Author = "chazwarp923 & Dragozino"
-    Version = "2.3.2"
+    Version = "2.3.4"
 
     GameName = "Baldur's Gate 3"
     GameShortName = "baldursgate3"
@@ -103,6 +103,7 @@ class BaldursGate3Game(BasicGame, mobase.IPluginFileMapper):
         # self._listDirsRecursive(configDirs, prefix=self.SCRIPT_EXTENDER_CONFIG_PREFIX)
         
         Path(QDir(os.getenv("LOCALAPPDATA") + "/Larian Studios/Baldur's Gate 3/").absoluteFilePath("Script Extender")).mkdir(parents=True, exist_ok=True)
+        Path(QDir(os.getenv("LOCALAPPDATA") + "/Larian Studios/Baldur's Gate 3/").absoluteFilePath("Mods")).mkdir(parents=True, exist_ok=True)
         
         modList = self._organizer.modList()
         for mod in modList.allMods():
