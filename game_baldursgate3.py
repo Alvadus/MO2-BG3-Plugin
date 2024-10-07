@@ -15,7 +15,7 @@ from .baldursgate3 import ModSettingsHelper
 class BaldursGate3Game(BasicGame, mobase.IPluginFileMapper):
     Name = "Baldur's Gate 3 Unofficial Support Plugin"
     Author = "chazwarp923 & Dragozino"
-    Version = "2.3.3"
+    Version = "2.3.4"
 
     GameName = "Baldur's Gate 3"
     GameShortName = "baldursgate3"
@@ -144,6 +144,14 @@ class BaldursGate3Game(BasicGame, mobase.IPluginFileMapper):
                             file_.strip("\\").strip("'/")
                         )
                         map.append(m)
+                        
+        map.append(
+            mobase.Mapping(
+                source = self._organizer.profile().absolutePath() + "/modsettings.lsx",
+                destination = self.GameDocumentsDirectory + "/modsettings.lsx",
+                is_directory = False,
+            )
+        )
         
         return map
 

@@ -178,8 +178,7 @@ def modInstalled(modList: mobase.IModList, profile: mobase.IProfile, mod) -> boo
                         modsCache[file]["ModName"] = []
                     if mod not in modsCache[file]["ModName"]:
                         modsCache[file]["ModName"].append(mod)
-                    # modsCache[file]["ModName"] = mod
-                    
+
     if modsCache:
         profilePath = profile.absolutePath()
         cacheJsonPath = os.path.join(profilePath, "modsCache.json")
@@ -190,16 +189,26 @@ def modInstalled(modList: mobase.IModList, profile: mobase.IProfile, mod) -> boo
         for pak_file, mod_info in modsCache.items():
             if pak_file not in cacheJson:
                 cacheJson[pak_file] = mod_info
-            if pak_file in cacheJson:
+            else:
+                # Update ModName list if mod isn't listed already
                 if mod not in cacheJson[pak_file]["ModName"]:
                     cacheJson[pak_file]["ModName"].append(mod)
 
+                # Update Version and Version64 fields if they have changed
+                if mod_info["Version"] != cacheJson[pak_file]["Version"]:
+                    cacheJson[pak_file]["Version"] = mod_info["Version"]
+                if mod_info["Version64"] != cacheJson[pak_file]["Version64"]:
+                    cacheJson[pak_file]["Version64"] = mod_info["Version64"]
+
+        # Save updated cache
         with open(cacheJsonPath, 'w') as file:
             json.dump(cacheJson, file, indent=4)
-            
-    # shutil.rmtree(temp_dir, ignore_errors=True)
     
-    return cacheJson[pak_file] if modsCache else None
+    # Clean up temporary extraction directory
+    shutil.rmtree(temp_dir, ignore_errors=True)
+    
+    return modsCache if modsCache else None
+
     
 def fixModsCache(modList: mobase.IModList, profile: mobase.IProfile):
     profilePath = profile.absolutePath()
@@ -378,12 +387,13 @@ def generateSettings(modList: mobase.IModList, profile: mobase.IProfile) -> bool
                             attributeName.setAttribute('type', name.get('type'))
                             nodeModuleShortDesc.appendChild(attributeName)
                             
-                            if publish_handle:
-                                attributePublishHandle = root.createElement('attribute')
-                                attributePublishHandle.setAttribute('id', 'PublishHandle')
-                                attributePublishHandle.setAttribute('value', publish_handle.get('value'))
-                                attributePublishHandle.setAttribute('type', publish_handle.get('type'))
-                                nodeModuleShortDesc.appendChild(attributePublishHandle)
+                            if not publish_handle:
+                                publish_handle = {'value': '0', 'type': 'uint64'}
+                            attributePublishHandle = root.createElement('attribute')
+                            attributePublishHandle.setAttribute('id', 'PublishHandle')
+                            attributePublishHandle.setAttribute('value', publish_handle.get('value'))
+                            attributePublishHandle.setAttribute('type', publish_handle.get('type'))
+                            nodeModuleShortDesc.appendChild(attributePublishHandle)
                             
                             attributeModsUUID = root.createElement('attribute')
                             attributeModsUUID.setAttribute('id', 'UUID')
@@ -391,17 +401,19 @@ def generateSettings(modList: mobase.IModList, profile: mobase.IProfile) -> bool
                             attributeModsUUID.setAttribute('type', uuid.get('type'))
                             nodeModuleShortDesc.appendChild(attributeModsUUID)
                             
-                            attributeVersion = root.createElement('attribute')
-                            attributeVersion.setAttribute('id', 'Version')
-                            attributeVersion.setAttribute('value', version.get('value') if version else '')
-                            attributeVersion.setAttribute('type', version.get('type') if version else '')
-                            nodeModuleShortDesc.appendChild(attributeVersion)
+                            if version:                        
+                                attributeVersion = root.createElement('attribute')
+                                attributeVersion.setAttribute('id', 'Version')
+                                attributeVersion.setAttribute('value', version.get('value') if version else '')
+                                attributeVersion.setAttribute('type', version.get('type') if version else '')
+                                nodeModuleShortDesc.appendChild(attributeVersion)
                             
-                            attributeVersion64 = root.createElement('attribute')
-                            attributeVersion64.setAttribute('id', 'Version64')
-                            attributeVersion64.setAttribute('value', version64.get('value') if version64 else '')
-                            attributeVersion64.setAttribute('type', version64.get('type') if version64 else '')
-                            nodeModuleShortDesc.appendChild(attributeVersion64)
+                            if version64:
+                                attributeVersion64 = root.createElement('attribute')
+                                attributeVersion64.setAttribute('id', 'Version64')
+                                attributeVersion64.setAttribute('value', version64.get('value') if version64 else '')
+                                attributeVersion64.setAttribute('type', version64.get('type') if version64 else '')
+                                nodeModuleShortDesc.appendChild(attributeVersion64)
 
     # Save the modsettings.lsx file
     xml_str = root.toprettyxml(indent="  ")
