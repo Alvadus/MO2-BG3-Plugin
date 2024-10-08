@@ -108,19 +108,27 @@ def parse_meta_lsx(meta_lsx_path):  # Extract information from meta.lsx
         return mod_info
     
 
-def getModInfoFromCache(modName:str, profile: mobase.IProfile):
+def getModInfoFromCache(modName:str, profile: mobase.IProfile, modList: mobase.IModList):
     profilePath = profile.absolutePath()
     cacheJsonPath = os.path.join(profilePath, "modsCache.json")
     
     if not os.path.exists(cacheJsonPath):
-        print("modsCache.json not found.")
-        return None
+        return None # No modsCache.json
     
     with open(cacheJsonPath, 'r') as file:
         modsCache = json.load(file)
     
     # Return all .pak files related to the modName
     modPakFiles = []
+    
+    modFolderPath = modList.getMod(modName).absolutePath() + "\\PAK_FILES"
+    if os.path.exists(modFolderPath) and os.path.isdir(modFolderPath):
+        pakFilesInFolder = [f for f in os.listdir(modFolderPath) if f.lower().endswith('.pak')]
+        for pak_file in pakFilesInFolder:
+            if not modsCache.get(pak_file):
+                modInstalled(modList, profile, modName)
+                
+    
     for pak_file, mod_info in modsCache.items():
         if "ModName" in mod_info and modName in mod_info["ModName"]:
             modPakFiles.append({pak_file: mod_info})
@@ -128,7 +136,6 @@ def getModInfoFromCache(modName:str, profile: mobase.IProfile):
     if modPakFiles:
         return modPakFiles
     else:
-        print(f"Mod '{modName}' not found in modsCache.json.")
         return None
     
 def getModCachesFromName(modName: str, profile: mobase.IProfile):
@@ -259,15 +266,18 @@ def generateSettings(modList: mobase.IModList, profile: mobase.IProfile) -> bool
     temp_dir = Path(temp_dir)
     temp_dir.mkdir(parents=True, exist_ok=True)
     
-    for mod in modSequence:
-        if (int(modList.state(mod) / 2) % 2 != 0):  # Check if mod is active
-            
-            # Get all .pak files associated with the mod
-            pak_files_info = getModInfoFromCache(mod, profile)
+    for mod in modSequence:           
+        # Get all .pak files associated with the mod
+        pak_files_info = getModInfoFromCache(mod, profile, modList)
+        if not pak_files_info: # Mod is not in cache
+            pak_files_info = modInstalled(modList, profile, mod)
             if pak_files_info:
+                # Add to mod cache
                 modInfoDict[mod] = pak_files_info
             else:
-                modInfoDict[mod] = modInstalled(modList, profile, mod)
+                continue
+        else:
+            modInfoDict[mod] = pak_files_info
                             
     root = minidom.Document()
     save = root.createElement('save')
