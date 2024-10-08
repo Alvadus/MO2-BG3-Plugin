@@ -115,8 +115,13 @@ def getModInfoFromCache(modName:str, profile: mobase.IProfile, modList: mobase.I
     if not os.path.exists(cacheJsonPath):
         return None # No modsCache.json
     
-    with open(cacheJsonPath, 'r') as file:
-        modsCache = json.load(file)
+    def load_mods_cache():
+        if os.path.exists(cacheJsonPath):
+            with open(cacheJsonPath, 'r') as file:
+                return json.load(file)
+        return None  # No modsCache.json
+    
+    modsCache = load_mods_cache()
     
     # Return all .pak files related to the modName
     modPakFiles = []
@@ -127,7 +132,7 @@ def getModInfoFromCache(modName:str, profile: mobase.IProfile, modList: mobase.I
         for pak_file in pakFilesInFolder:
             if not modsCache.get(pak_file):
                 modInstalled(modList, profile, modName)
-                
+        modsCache = load_mods_cache()
     
     for pak_file, mod_info in modsCache.items():
         if "ModName" in mod_info and modName in mod_info["ModName"]:
