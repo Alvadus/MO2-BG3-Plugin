@@ -42,6 +42,7 @@ def extract_meta_lsx(pak_path, output_dir): # Extract meta.lsx from .pak file
         text=True
     )
 
+    is_override = False
     modinfo = {
                 "Name": "Override_Mod",
                 "UUID": "Override_Mod",
@@ -56,7 +57,43 @@ def extract_meta_lsx(pak_path, output_dir): # Extract meta.lsx from .pak file
         meta_lsx_path = find_meta_lsx('meta.lsx', output_dir)
 
         if meta_lsx_path:
+            
+            tree = ET.parse(str(meta_lsx_path))
+            root = tree.getroot()
+            module_info = root.find(".//node[@id='ModuleInfo']")
+            
+            mod_folder = get_attribute_value(module_info, 'Folder')     
+            
+            if mod_folder:
+                command = [
+                    str(divine_path),
+                    "-a", "list-package",
+                    "-g", "bg3",
+                    "-s", str(pak_path)
+                ]
+                result = subprocess.run(
+                    command,
+                    creationflags=subprocess.CREATE_NO_WINDOW,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
+                
+                
+                mod_folder_name = mod_folder.get('value')
+                list_output = result.stdout if result.returncode == 0 else None
+                
+                mod_folder_exists = f"Public/{mod_folder_name}" in list_output
+                
+                if not mod_folder_exists and any(f"Public/{folder}" in list_output for folder in ["Game", "GUI"]):
+                    is_override = True
+                    
+                if not mod_folder_exists and any(f"Mods/{folder}" in list_output for folder in ["MainUI"]):
+                    is_override = True
+            
             modinfo = parse_meta_lsx(meta_lsx_path)
+            
+    modinfo["IsOverride"] = is_override
           
     return modinfo
 
@@ -273,16 +310,17 @@ def generateSettings(modList: mobase.IModList, profile: mobase.IProfile) -> bool
     
     for mod in modSequence:           
         # Get all .pak files associated with the mod
-        pak_files_info = getModInfoFromCache(mod, profile, modList)
-        if not pak_files_info: # Mod is not in cache
-            pak_files_info = modInstalled(modList, profile, mod)
-            if pak_files_info:
-                # Add to mod cache
-                modInfoDict[mod] = pak_files_info
+        if modList.state(mod) & mobase.ModState.ACTIVE != 0:
+            pak_files_info = getModInfoFromCache(mod, profile, modList)
+            if not pak_files_info: # Mod is not in cache
+                pak_files_info = modInstalled(modList, profile, mod)
+                if pak_files_info:
+                    # Add to mod cache
+                    modInfoDict[mod] = pak_files_info
+                else:
+                    continue
             else:
-                continue
-        else:
-            modInfoDict[mod] = pak_files_info
+                modInfoDict[mod] = pak_files_info
                             
     root = minidom.Document()
     save = root.createElement('save')
@@ -339,6 +377,11 @@ def generateSettings(modList: mobase.IModList, profile: mobase.IProfile) -> bool
     attributeNameGustav.setAttribute('value', 'GustavDev')
     attributeNameGustav.setAttribute('type', 'LSString')
     nodeModuleShortDescGustav.appendChild(attributeNameGustav)
+    attributeNameGustav = root.createElement('attribute')
+    attributeNameGustav.setAttribute('id', 'PublishHandle')
+    attributeNameGustav.setAttribute('value', '0')
+    attributeNameGustav.setAttribute('type', 'uint64')
+    nodeModuleShortDescGustav.appendChild(attributeNameGustav) 
     attributeModsUUIDGustav = root.createElement('attribute')
     attributeModsUUIDGustav.setAttribute('id', 'UUID') 
     attributeModsUUIDGustav.setAttribute('value', '28ac9ce2-2aba-8cda-b3b5-6e922f71b6b8')
@@ -346,7 +389,7 @@ def generateSettings(modList: mobase.IModList, profile: mobase.IProfile) -> bool
     nodeModuleShortDescGustav.appendChild(attributeModsUUIDGustav)
     attributeVersion64Gustav = root.createElement('attribute')
     attributeVersion64Gustav.setAttribute('id', 'Version64') 
-    attributeVersion64Gustav.setAttribute('value', '144961545746289842')
+    attributeVersion64Gustav.setAttribute('value', '145100779997082619')
     attributeVersion64Gustav.setAttribute('type', 'int64')
     nodeModuleShortDescGustav.appendChild(attributeVersion64Gustav)   
     
@@ -367,6 +410,10 @@ def generateSettings(modList: mobase.IModList, profile: mobase.IProfile) -> bool
                         uuid = mod_info.get('UUID')
                         version = mod_info.get('Version')
                         version64 = mod_info.get('Version64')
+                        is_override = mod_info.get('IsOverride')
+                        
+                        if is_override:
+                            continue
 
                         if name != "Override_Mod":
                             # Add to ModOrder
