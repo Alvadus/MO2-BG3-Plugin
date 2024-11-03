@@ -310,17 +310,16 @@ def generateSettings(modList: mobase.IModList, profile: mobase.IProfile) -> bool
     
     for mod in modSequence:           
         # Get all .pak files associated with the mod
-        if modList.state(mod) & mobase.ModState.ACTIVE != 0:
-            pak_files_info = getModInfoFromCache(mod, profile, modList)
-            if not pak_files_info: # Mod is not in cache
-                pak_files_info = modInstalled(modList, profile, mod)
-                if pak_files_info:
-                    # Add to mod cache
-                    modInfoDict[mod] = pak_files_info
-                else:
-                    continue
-            else:
+        pak_files_info = getModInfoFromCache(mod, profile, modList)
+        if not pak_files_info: # Mod is not in cache
+            pak_files_info = modInstalled(modList, profile, mod)
+            if pak_files_info:
+                # Add to mod cache
                 modInfoDict[mod] = pak_files_info
+            else:
+                continue
+        else:
+            modInfoDict[mod] = pak_files_info
                             
     root = minidom.Document()
     save = root.createElement('save')
